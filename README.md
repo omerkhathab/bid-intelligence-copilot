@@ -5,6 +5,8 @@ implementation is an incremental MVP: it uploads PDFs, preserves page-level
 text and citations, extracts structured requirements, and exposes a Groq
 prompt-safety check.
 
+![Screenshot of the app](images/image1.png)
+
 ## Prerequisites
 
 - Node.js 20+
