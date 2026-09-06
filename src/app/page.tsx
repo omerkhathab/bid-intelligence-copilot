@@ -1,69 +1,47 @@
-import Image from "next/image";
+"use client";
+
+import { ChangeEvent, useEffect, useState } from "react";
+
+type Page = { page: number; text: string; character_count: number };
+type DocumentRecord = { id: string; filename: string; document_type: string; version: string; uploaded_at: string; page_count: number; character_count: number; status: string; pages: Page[] };
+type Requirement = { id: string; requirement: string; category: string; priority: string; source_document: string; page: number; section: string; evidence: string; responsible_party: string; status: string };
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const nav = ["Dashboard", "Documents", "Requirements", "Compliance", "Risks", "Clarifications", "Version Changes", "AI Assistant"];
 
 export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+  const [active, setActive] = useState("Documents");
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [requirements, setRequirements] = useState<Requirement[]>([]);
+  const [selected, setSelected] = useState<DocumentRecord | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("Connect the document library to begin indexing tender material.");
+
+  const refresh = () => {
+    fetch(`${API_URL}/api/documents`).then((response) => response.json()).then(setDocuments).catch(() => setMessage("Backend is offline. Start FastAPI on port 8000."));
+    fetch(`${API_URL}/api/requirements`).then((response) => response.json()).then(setRequirements).catch(() => undefined);
+  };
+  useEffect(refresh, []);
+
+  async function uploadDocument(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]; if (!file) return;
+    if (file.type !== "application/pdf") { setMessage("Only PDF files are accepted."); return; }
+    setLoading(true); setMessage(`Extracting page text from ${file.name}...`);
+    const form = new FormData(); form.append("file", file); form.append("document_type", "Tender document"); form.append("version", "v1");
+    try { const response = await fetch(`${API_URL}/api/documents`, { method: "POST", body: form }); const data = await response.json(); if (!response.ok) throw new Error(data.detail ?? "Upload failed"); setDocuments((current) => [data, ...current]); setSelected(data); setRequirements(await fetch(`${API_URL}/api/requirements`).then((result) => result.json())); setMessage(`${data.filename} indexed successfully. ${data.page_count} page citations are now available.`); } catch (error) { setMessage(error instanceof Error ? error.message : "Upload failed."); } finally { setLoading(false); event.target.value = ""; }
+  }
+
+  const pageCount = documents.reduce((total, item) => total + item.page_count, 0);
+  const characterCount = documents.reduce((total, item) => total + item.character_count, 0);
+  return <main className="shell"><aside className="sidebar"><div className="brand"><b>P</b><span>PARALLAX<small>Bid intelligence</small></span></div><div className="project"><label>ACTIVE PROJECT</label><strong>Jubail Water PPP</strong><span>Saudi Arabia · Water</span></div><nav>{nav.map((item, index) => <button className={item === active ? "active" : ""} key={item} onClick={() => setActive(item)}><i>{["◫", "▤", "≡", "✓", "△", "?", "↕", "✦"][index]}</i>{item}{item === "Documents" && <em>LIVE</em>}{item === "Requirements" && requirements.length > 0 && <em>{requirements.length}</em>}</button>)}</nav><div className="sidebar-foot">DEMO DATASET<small>Public Saudi water PPP material<br />No confidential documents</small></div></aside><section className="workspace"><header><span>PROJECTS <b>/</b> JUBAIL WATER PPP <b>/</b> {active.toUpperCase()}</span><button>◌</button><button>?</button></header>{active === "Requirements" || active === "Compliance" ? <RequirementsView requirements={requirements} setRequirements={setRequirements} compliance={active === "Compliance"} /> : <DocumentView documents={documents} selected={selected} setSelected={setSelected} pageCount={pageCount} characterCount={characterCount} loading={loading} message={message} uploadDocument={uploadDocument} />}</section></main>;
+}
+
+function DocumentView({ documents, selected, setSelected, pageCount, characterCount, loading, message, uploadDocument }: { documents: DocumentRecord[]; selected: DocumentRecord | null; setSelected: (document: DocumentRecord) => void; pageCount: number; characterCount: number; loading: boolean; message: string; uploadDocument: (event: ChangeEvent<HTMLInputElement>) => void }) {
+  return <div className="content"><div className="heading"><div><label>SOURCE LIBRARY <mark>● INDEXED</mark></label><h1>Tender documents</h1><p>Page-aware source material powering every extracted fact and citation.</p></div><label className="upload-button">{loading ? "Indexing..." : "＋ Upload PDF"}<input type="file" accept="application/pdf" onChange={uploadDocument} disabled={loading} /></label></div><div className="notice"><span>◈</span><div><strong>{message}</strong><small>Documents stay local in this demo. Each page is preserved as a separate retrieval unit for future extraction.</small></div></div><div className="stats"><div><span>DOCUMENTS</span><strong>{documents.length}</strong></div><div><span>PAGES INDEXED</span><strong>{pageCount}</strong></div><div><span>TEXT CHARACTERS</span><strong>{characterCount.toLocaleString()}</strong></div></div><div className="library"><section className="panel"><div className="panel-head"><h2>Indexed source material</h2><span>{documents.length ? "Live library" : "Waiting for upload"}</span></div>{documents.length === 0 ? <div className="empty"><div>▤</div><h3>No documents indexed yet</h3><p>Upload the Instructions to Bidders, technical requirements, or draft project agreement to create the first page-aware sources.</p><label className="empty-upload">Browse PDF files<input type="file" accept="application/pdf" onChange={uploadDocument} /></label></div> : <div className="rows">{documents.map((document) => <button className={`document-row ${selected?.id === document.id ? "selected" : ""}`} key={document.id} onClick={() => setSelected(document)}><span className="pdf">PDF</span><span className="doc-name"><strong>{document.filename}</strong><small>{document.document_type} · uploaded {new Date(document.uploaded_at).toLocaleDateString()}</small></span><span>{document.page_count} pages</span><mark>{document.version}</mark><span className="indexed">● {document.status}</span><b>›</b></button>)}</div>}</section><aside className="panel preview">{selected ? <><div className="panel-head"><h2>Page preview</h2><span>{selected.filename}</span></div><div className="preview-meta"><b>{selected.page_count}</b><span>page citations ready<br />{selected.character_count.toLocaleString()} characters extracted</span></div><div className="page-list">{selected.pages.slice(0, 6).map((page) => <button key={page.page}><span>p. {page.page}</span><p>{page.text ? page.text.slice(0, 105).replace(/\s+/g, " ") : "No selectable text found on this page."}</p><small>{page.character_count} chars ↗</small></button>)}</div></> : <div className="preview-empty"><span>◌</span><strong>Select a document</strong><p>Page-level text and source metadata will appear here.</p></div>}</aside></div></div>;
+}
+
+function RequirementsView({ requirements, setRequirements, compliance }: { requirements: Requirement[]; setRequirements: (items: Requirement[]) => void; compliance: boolean }) {
+  const [query, setQuery] = useState("");
+  const filtered = requirements.filter((item) => `${item.requirement} ${item.category} ${item.source_document}`.toLowerCase().includes(query.toLowerCase()));
+  const updateStatus = async (id: string, status: string) => { setRequirements(requirements.map((item) => item.id === id ? { ...item, status } : item)); };
+  return <div className="content"><div className="heading"><div><label>{compliance ? "COMPLIANCE CONTROL" : "REQUIREMENT REGISTER"} <mark>● EXTRACTED</mark></label><h1>{compliance ? "Compliance matrix" : "Extracted requirements"}</h1><p>Structured records grounded in page-aware tender text. Every row retains its evidence and citation.</p></div><button className="dark-button" onClick={() => window.location.reload()}>↻ Refresh extraction</button></div><div className="notice"><span>✦</span><div><strong>{requirements.length ? `${requirements.length} requirements extracted from indexed documents.` : "No requirements extracted yet."}</strong><small>Deterministic extraction is active now; an Ollama adapter can replace this step without changing the citation contract.</small></div></div><div className="toolbar"><input placeholder="Search requirements, categories, or sources..." value={query} onChange={(event) => setQuery(event.target.value)} /><span>{filtered.length} visible records</span></div><section className="panel requirements"><div className="table-head"><span>REQUIREMENT</span><span>CATEGORY</span><span>PRIORITY</span><span>SOURCE</span><span>OWNER</span><span>STATUS</span></div>{filtered.length === 0 ? <div className="empty"><div>≡</div><h3>Nothing to review yet</h3><p>Upload a text-based tender PDF and the extractor will create records here.</p></div> : filtered.map((item) => <div className="requirement-row" key={item.id}><div><strong>{item.requirement}</strong><small>{item.evidence}</small></div><span>{item.category}</span><span className={`priority priority-${item.priority.toLowerCase()}`}>● {item.priority}</span><button className="citation">{item.source_document} · p.{item.page} ↗</button><span>{item.responsible_party}</span><select value={item.status} onChange={(event) => updateStatus(item.id, event.target.value)}><option>Not Started</option><option>In Progress</option><option>Complete</option><option>Needs Clarification</option><option>Not Applicable</option></select></div>)}</section></div>;
 }
